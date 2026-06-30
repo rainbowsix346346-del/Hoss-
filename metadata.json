@@ -1,0 +1,6 @@
+{
+  "name": "هدبند مرموز",
+  "description": "یک بازی دورهمی پرهیجان و مدرن با ترکیب مکانیزم‌های هدبند و بازی محبوب مافیا در فضایی جذاب و مرموز",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
