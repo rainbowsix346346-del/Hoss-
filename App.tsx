@@ -1,31 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Play, 
-  Settings as SettingsIcon, 
-  User, 
-  Plus, 
-  Trash2, 
   Volume2, 
   VolumeX, 
-  Clock, 
-  RotateCcw, 
-  Check, 
-  X, 
-  Crown, 
-  Award, 
-  Info, 
-  Sparkles, 
-  Smile, 
-  UserPlus, 
-  Users, 
-  Flame, 
   HelpCircle,
-  FlipHorizontal,
-  ChevronLeft,
   BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CATEGORIES } from './data/roles';
+import { CATEGORIES } from './roles'; // مسیر اصلاح شده
 import { Player, GameSettings, GameState, CategoryId } from './types';
 import { sounds } from './utils/sounds';
 
@@ -39,7 +21,6 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return arr;
 };
 
-// Funny Persian pre-defined names for quick adding
 const FUNNY_NAMES = [
   'پدرخوانده آرش', 'دکتر مریم', 'کارآگاه نیما', 'شهروند ساده سارا', 
   'قاضی مهران', 'ساقی بهروز', 'ناتو شایان', 'جان‌سخت مهسا', 
@@ -48,7 +29,6 @@ const FUNNY_NAMES = [
 ];
 
 export default function App() {
-  // Game States
   const [gameState, setGameState] = useState<GameState>('WELCOME');
   const [players, setPlayers] = useState<Player[]>([
     { id: '1', name: 'بازیکن ۱', score: 0, guesses: [] },
@@ -61,411 +41,22 @@ export default function App() {
     selectedCategories: ['mafia', 'funny', 'jobs'],
   });
   
-  const [currentRound, setCurrentRound] = useState<number>(1);
-  const [currentPlayerIndex, setCurrentPlayerIndex] = useState<number>(0);
-  const [wordsPool, setWordsPool] = useState<string[]>([]);
-  const [currentWord, setCurrentWord] = useState<string>('');
-  const [turnScore, setTurnScore] = useState<number>(0);
-  const [turnGuesses, setTurnGuesses] = useState<{ word: string; correct: boolean }[]>([]);
-  
-  // Audio configuration
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+
+  // بقیه کدهای منطق بازی اینجا قرار می‌گیرند...
   
-  // Display modifiers (like 180 flip)
-  const [isFlipped, setIsFlipped] = useState<boolean>(false);
-  
-  // Timer States
-  const [timer, setTimer] = useState<number>(settings.timeLimit);
-  const [countdown, setCountdown] = useState<number>(3);
-  
-  // Game flash effect state ('CORRECT' | 'SKIP' | null)
-  const [flashEffect, setFlashEffect] = useState<'CORRECT' | 'SKIP' | null>(null);
-
-  // Modals
-  const [showHowToPlay, setShowHowToPlay] = useState<boolean>(false);
-  
-  // Input for adding a player
-  const [newPlayerName, setNewPlayerName] = useState<string>('');
-
-  // Sounds wrapper
-  const playSfx = (type: 'tick' | 'beep' | 'beep-high' | 'correct' | 'skip' | 'timeup' | 'victory') => {
-    if (!soundEnabled) return;
-    switch (type) {
-      case 'tick': sounds.playTick(); break;
-      case 'beep': sounds.playCountdownBeep(false); break;
-      case 'beep-high': sounds.playCountdownBeep(true); break;
-      case 'correct': sounds.playCorrect(); break;
-      case 'skip': sounds.playSkip(); break;
-      case 'timeup': sounds.playTimeUp(); break;
-      case 'victory': sounds.playVictory(); break;
-    }
-  };
-
-  // Add random funny names to player list
-  const handleAddRandomName = () => {
-    const availableNames = FUNNY_NAMES.filter(
-      name => !players.some(p => p.name === name)
-    );
-    const randomName = availableNames.length > 0 
-      ? availableNames[Math.floor(Math.random() * availableNames.length)]
-      : `بازیکن جدید ${players.length + 1}`;
-      
-    const newPlayer: Player = {
-      id: Date.now().toString(),
-      name: randomName,
-      score: 0,
-      guesses: []
-    };
-    setPlayers([...players, newPlayer]);
-    playSfx('tick');
-  };
-
-  const handleAddPlayer = () => {
-    if (!newPlayerName.trim()) return;
-    const newPlayer: Player = {
-      id: Date.now().toString(),
-      name: newPlayerName.trim(),
-      score: 0,
-      guesses: []
-    };
-    setPlayers([...players, newPlayer]);
-    setNewPlayerName('');
-    playSfx('tick');
-  };
-
-  const handleRemovePlayer = (id: string) => {
-    if (players.length <= 2) return; // Minimum 2 players
-    setPlayers(players.filter(p => p.id !== id));
-    playSfx('skip');
-  };
-
-  const handleToggleCategory = (catId: CategoryId) => {
-    let cats = [...settings.selectedCategories];
-    if (cats.includes(catId)) {
-      if (cats.length > 1) {
-        cats = cats.filter(id => id !== catId);
-      }
-    } else {
-      cats.push(catId);
-    }
-    setSettings({ ...settings, selectedCategories: cats });
-    playSfx('tick');
-  };
-
-  // Setup words pool and launch preparation screen
-  const handleStartSetup = () => {
-    if (players.length < 2) return;
-    
-    // Gather all words from selected categories
-    let pool: string[] = [];
-    CATEGORIES.forEach(cat => {
-      if (settings.selectedCategories.includes(cat.id)) {
-        pool = [...pool, ...cat.words];
-      }
-    });
-
-    if (pool.length === 0) {
-      // Fallback
-      pool = CATEGORIES[0].words;
-    }
-
-    setWordsPool(shuffleArray(pool));
-    setCurrentRound(1);
-    setCurrentPlayerIndex(0);
-    
-    // Reset player scores
-    setPlayers(players.map(p => ({ ...p, score: 0, guesses: [] })));
-    
-    setGameState('PREPARATION');
-    playSfx('tick');
-  };
-
-  // Prepare a turn
-  const handleStartTurnPrep = () => {
-    setTurnScore(0);
-    setTurnGuesses([]);
-    setTimer(settings.timeLimit);
-    setCountdown(3);
-    setGameState('COUNTDOWN');
-  };
-
-  // Countdown timer effect
-  useEffect(() => {
-    if (gameState !== 'COUNTDOWN') return;
-
-    playSfx(countdown === 1 ? 'beep-high' : 'beep');
-
-    const interval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          
-          // Pull first word and start playing
-          let nextPool = [...wordsPool];
-          if (nextPool.length === 0) {
-            // Re-generate pool if empty
-            let fullPool: string[] = [];
-            CATEGORIES.forEach(cat => {
-              if (settings.selectedCategories.includes(cat.id)) {
-                fullPool = [...fullPool, ...cat.words];
-              }
-            });
-            nextPool = shuffleArray(fullPool);
-          }
-          
-          const word = nextPool.shift() || 'شاهدزد';
-          setCurrentWord(word);
-          setWordsPool(nextPool);
-          
-          setGameState('PLAYING');
-          return 3;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [gameState, countdown]);
-
-  // Active turn timer effect
-  useEffect(() => {
-    if (gameState !== 'PLAYING') return;
-
-    const interval = setInterval(() => {
-      setTimer(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          handleTimeUp();
-          return 0;
-        }
-        // Play tick sound for final 10 seconds
-        if (prev <= 10) {
-          playSfx('tick');
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [gameState, timer]);
-
-  // Handle skip or correct action during game
-  const handleAction = (correct: boolean) => {
-    playSfx(correct ? 'correct' : 'skip');
-    setFlashEffect(correct ? 'CORRECT' : 'SKIP');
-    
-    // Clear flash effect after short duration
-    setTimeout(() => {
-      setFlashEffect(null);
-    }, 250);
-
-    // Record guess
-    const updatedGuesses = [...turnGuesses, { word: currentWord, correct }];
-    setTurnGuesses(updatedGuesses);
-    if (correct) {
-      setTurnScore(prev => prev + 1);
-    }
-
-    // Get next word
-    let nextPool = [...wordsPool];
-    if (nextPool.length === 0) {
-      let fullPool: string[] = [];
-      CATEGORIES.forEach(cat => {
-        if (settings.selectedCategories.includes(cat.id)) {
-          fullPool = [...fullPool, ...cat.words];
-        }
-      });
-      nextPool = shuffleArray(fullPool);
-    }
-    const nextWord = nextPool.shift() || 'مافیا';
-    setCurrentWord(nextWord);
-    setWordsPool(nextPool);
-  };
-
-  // Time is up handler
-  const handleTimeUp = () => {
-    playSfx('timeup');
-    
-    // Update player's score and guesses
-    setPlayers(prevPlayers => {
-      const updated = [...prevPlayers];
-      const player = updated[currentPlayerIndex];
-      player.score += turnScore;
-      player.guesses = [...player.guesses, ...turnGuesses];
-      return updated;
-    });
-
-    setGameState('TURN_END');
-  };
-
-  const handleNextTurn = () => {
-    const nextPlayerIdx = currentPlayerIndex + 1;
-    if (nextPlayerIdx < players.length) {
-      // Next player in current round
-      setCurrentPlayerIndex(nextPlayerIdx);
-      setGameState('PREPARATION');
-      playSfx('tick');
-    } else {
-      // All players played, check if next round or end game
-      const nextRound = currentRound + 1;
-      if (nextRound <= settings.rounds) {
-        setCurrentRound(nextRound);
-        setCurrentPlayerIndex(0);
-        setGameState('PREPARATION');
-        playSfx('tick');
-      } else {
-        // End of game! Show leaderboard
-        setGameState('LEADERBOARD');
-        playSfx('victory');
-      }
-    }
-  };
-
-  // Determine mafia titles based on scores
-  const getMafiaTitle = (score: number) => {
-    if (score >= 12) return { title: 'پدرخوانده حدس کلمات', color: 'text-amber-400 border-amber-400', badge: '👑' };
-    if (score >= 8) return { title: 'کارآگاه تیزبین', color: 'text-red-400 border-red-500', badge: '🕵️‍♂️' };
-    if (score >= 5) return { title: 'دکتر نجات‌بخش', color: 'text-teal-400 border-teal-500', badge: '🩺' };
-    if (score >= 2) return { title: 'شهروند ساده', color: 'text-slate-300 border-slate-500', badge: '🧑‍🌾' };
-    return { title: 'اسنایپر ناشی (شلیک به خودی)', color: 'text-orange-400 border-orange-500', badge: '🏹' };
-  };
-
   return (
-    <div className="relative min-h-screen bg-slate-950 text-slate-100 overflow-x-hidden flex flex-col justify-between font-sans selection:bg-red-600 selection:text-white" dir="rtl">
-      
-      {/* Dynamic Ambient Background Sparkles & Red/Gold Halos */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-red-950/15 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-amber-950/10 blur-[120px]" />
-      </div>
-
-      {/* HEADER BAR (Visible unless playing or in countdown) */}
-      {gameState !== 'PLAYING' && gameState !== 'COUNTDOWN' && (
-        <header className="relative z-10 px-6 py-4 flex items-center justify-between border-b border-slate-900/60 bg-slate-950/40 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-amber-500 flex items-center justify-center shadow-lg shadow-red-950/50">
-              <span className="text-xl font-display text-white">🕵️</span>
-            </div>
-            <div>
-              <h1 id="app-title" className="font-display text-xl text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-red-500 to-red-600">هدبند مرموز</h1>
-              <p className="text-[10px] text-slate-400">تلفیق بازی هدبند و مافیا</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setSoundEnabled(!soundEnabled);
-                sounds.playTick();
-              }}
-              className="p-2.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 text-slate-400 hover:text-amber-400 transition-all cursor-pointer"
-              title={soundEnabled ? 'قطع صدا' : 'وصل صدا'}
-            >
-              {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-            </button>
-            <button
-              onClick={() => {
-                setShowHowToPlay(true);
-                playSfx('tick');
-              }}
-              className="p-2.5 rounded-xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900 text-slate-400 hover:text-amber-400 transition-all cursor-pointer flex items-center gap-1.5 text-sm"
-            >
-              <HelpCircle size={18} />
-              <span className="hidden sm:inline">راهنمای بازی</span>
-            </button>
-          </div>
-        </header>
-      )}
-
-      {/* MAIN SCREEN CONTAINER */}
-      <main className="flex-1 w-full max-w-4xl mx-auto px-4 py-6 relative z-10 flex flex-col justify-center">
-        
-        <AnimatePresence mode="wait">
-          
-          {/* 1. WELCOME / SPLASH SCREEN */}
-          {gameState === 'WELCOME' && (
-            <motion.div
-              key="welcome"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
-              className="text-center space-y-8 py-10"
-            >
-              {/* Massive Game Logo */}
-              <div className="relative inline-block">
-                <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-red-600 via-amber-400 to-red-700 blur-xl opacity-30 animate-pulse" />
-                <div className="relative w-40 h-40 rounded-full bg-slate-900 border-2 border-amber-500/30 flex flex-col items-center justify-center mx-auto glow-gold">
-                  <span className="text-6xl animate-bounce">🎩</span>
-                  <div className="absolute bottom-6 bg-red-600 text-white text-xs px-2.5 py-0.5 rounded-full font-bold shadow-md shadow-red-950">
-                    رایگان و آفلاین
-                  </div>
-                </div>
-              </div>
-
-              {/* Slogan */}
-              <div className="space-y-3">
-                <h2 className="font-display text-4xl md:text-5xl text-glow-gold tracking-wide">
-                  بازی دورهمی <span className="text-amber-400">هدبند مرموز</span>
-                </h2>
-                <p className="text-slate-400 max-w-lg mx-auto text-sm md:text-base leading-relaxed px-4">
-                  یک چالش کمدی و هیجانی برای جمع‌های خانوادگی و دوستانه! گوشی را روی پیشانی بگذار، بقیه تو را راهنمایی می‌کنند تا نقش مافیایی یا کلمه فانتزی خودت را حدس بزنی!
-                </p>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-md mx-auto pt-4 px-4">
-                <button
-                  id="btn-start-game"
-                  onClick={() => {
-                    setGameState('SETTINGS');
-                    playSfx('tick');
-                  }}
-                  className="w-full sm:flex-1 py-4 px-8 bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-slate-950 font-display text-xl rounded-2xl shadow-xl shadow-red-950/40 transform hover:-translate-y-1 transition-all flex items-center justify-center gap-2 cursor-pointer font-black"
-                >
-                  <Play fill="currentColor" size={20} className="text-slate-950" />
-                  شروع رقابت مرموز
-                </button>
-                
-                <button
-                  onClick={() => {
-                    setShowHowToPlay(true);
-                    playSfx('tick');
-                  }}
-                  className="w-full sm:w-auto py-4 px-6 border border-slate-800 bg-slate-900/60 hover:bg-slate-900/90 text-slate-300 rounded-2xl transition-all flex items-center justify-center gap-2 cursor-pointer text-sm font-medium"
-                >
-                  <BookOpen size={18} className="text-amber-500" />
-                  آموزش گام به گام
-                </button>
-              </div>
-
-              {/* Dynamic Feature Badges */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-10 max-w-2xl mx-auto px-4">
-                {[
-                  { emoji: '🕵️‍♂️', label: 'نقش‌های واقعی مافیا' },
-                  { emoji: '⏱️', label: 'زمان‌سنج معکوس منعطف' },
-                  { emoji: '🤪', label: 'کلمات عجیب و کمدی' },
-                  { emoji: '👑', label: 'جدول امتیازات و مدال‌ها' }
-                ].map((item, index) => (
-                  <div key={index} className="p-4 rounded-2xl border border-slate-900 bg-slate-900/30 backdrop-blur-sm flex flex-col items-center justify-center space-y-1.5">
-                    <span className="text-2xl">{item.emoji}</span>
-                    <span className="text-xs text-slate-400 font-medium text-center">{item.label}</span>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {/* 2. SETTINGS / PLAYERS SCREEN */}
-          {gameState === 'SETTINGS' && (
-            <motion.div
-              key="settings"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-8 py-4 px-2"
-            >
+    <div className="relative min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center" dir="rtl">
+      <h1 className="text-3xl font-bold mb-4">هدبند مرموز</h1>
+      <button 
+        onClick={() => setGameState('SETTINGS')}
+        className="px-6 py-3 bg-red-600 rounded-xl font-bold"
+      >
+        شروع بازی
+      </button>
+    </div>
+  );
+}            >
               <div className="flex items-center gap-3 border-b border-slate-900 pb-4">
                 <div className="p-2 bg-amber-500/10 text-amber-400 rounded-lg">
                   <SettingsIcon size={24} />
@@ -555,7 +146,8 @@ export default function App() {
                       <label className="text-xs text-slate-400 block font-semibold">زمان هر نوبت (ثانیه)</label>
                       <div className="flex items-center justify-between gap-1.5">
                         {[30, 60, 90].map((t) => (
-                          <button
+                         
+      <button
                             key={t}
                             onClick={() => {
                               setSettings({ ...settings, timeLimit: t });
